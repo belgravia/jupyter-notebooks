@@ -15,18 +15,17 @@ try:
 except:
 	fiveprimeon=False
 
-
 alljuncs = {}
-
 
 for line in bed1:
 	line = line.rstrip().split('\t')
 	if fiveprimeon:
 		if line[5] == '+':
 			line[1], line[2] = line[2], line[1] 			
-
 	elif line[5] == '-':
 		line[1], line[2] = line[2], line[1]  # reverse coordinates for junctions on - strand
+	elif line[5] not in ['+', '-']:
+		continue
 	chrom, fiveprime, threeprime, name, count, strand = line
 	chrom = strand+chrom
 	if chrom not in alljuncs:  # chrom
@@ -34,8 +33,9 @@ for line in bed1:
 	if fiveprime not in alljuncs[chrom]:
 		alljuncs[chrom][fiveprime] = {}  # 5' end anchor
 	if threeprime not in alljuncs[chrom][fiveprime]:
-		alljuncs[chrom][fiveprime][threeprime] = [0,0]
+		alljuncs[chrom][fiveprime][threeprime] = [0,0, name]
 	alljuncs[chrom][fiveprime][threeprime][0] = int(count)
+
 
 for line in bed2:
 	line = line.rstrip().split('\t')
@@ -44,6 +44,8 @@ for line in bed2:
 			line[1], line[2] = line[2], line[1] 			
 	elif line[5] == '-':
 		line[1], line[2] = line[2], line[1]  # reverse coordinates for junctions on - strand
+	elif line[5] not in ['+', '-']:
+		continue
 	chrom, fiveprime, threeprime, name, count, strand = line
 	chrom = strand+chrom
 	if chrom not in alljuncs:  # chrom
@@ -51,8 +53,10 @@ for line in bed2:
 	if fiveprime not in alljuncs[chrom]:
 		alljuncs[chrom][fiveprime] = {}  # 5' end anchor
 	if threeprime not in alljuncs[chrom][fiveprime]:
-		alljuncs[chrom][fiveprime][threeprime] = [0,0]
+		alljuncs[chrom][fiveprime][threeprime] = [0,0, name]
 	alljuncs[chrom][fiveprime][threeprime][1] = int(count)
+
+
 
 with open(outfilename, 'wt') as outfile:
 	writer = csv.writer(outfile, delimiter='\t')
@@ -61,7 +65,7 @@ with open(outfilename, 'wt') as outfile:
 			if len(alljuncs[chrom][fiveprime]) == 1:
 				continue
 			for threeprime1 in alljuncs[chrom][fiveprime]:
-				if sum(alljuncs[chrom][fiveprime][threeprime1]) == 1:
+				if sum(alljuncs[chrom][fiveprime][threeprime1][:2]) == 1:
 					continue
 				allothercounts = [0,0]
 				for threeprime2 in alljuncs[chrom][fiveprime]:
@@ -72,6 +76,7 @@ with open(outfilename, 'wt') as outfile:
 					# ctable = [alljuncs[chrom][fiveprime][threeprime1], alljuncs[chrom][fiveprime][threeprime2]]
 				if sum(allothercounts) == 1:
 					continue
-				ctable = [alljuncs[chrom][fiveprime][threeprime1], allothercounts]
-				writer.writerow([chrom[1:], fiveprime, threeprime1, sps.fisher_exact(ctable)[1], chrom[0]] + ctable[0] + ctable[1])
-
+				ctable = [alljuncs[chrom][fiveprime][threeprime1][:2], allothercounts]
+				name = alljuncs[chrom][fiveprime][threeprime1][2]
+				writer.writerow([chrom[1:], fiveprime, threeprime1, sps.fisher_exact(ctable)[1], 
+					chrom[0]] + ctable[0] + ctable[1]+ [name])
