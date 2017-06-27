@@ -5,78 +5,54 @@ try:
 	bed1 = open(sys.argv[1])
 	bed2 = open(sys.argv[2])
 	outfilename = sys.argv[3]
+	fiveprimeon = True if sys.argv[4] else False
 except:
-	print('usage: script.py junctionswt junctionsmt outfilename type')  # all junctions (not just the ones unique to long reads)
-	sys.exit(1)
+	print('usage: script.py junctionswt junctionsmt outfilename [5 prime]')  # all junctions (not just the ones unique to long reads)
+	sys.exit()
 
-try:
-	sys.argv[4]
-	fiveprimeon = True
-except:
-	fiveprimeon=False
+def bedreader(bed, junctiondict):
+	for line in bed:
+		line = line.rstrip().split('\t')
+		if fiveprimeon:
+			if line[5] == '+':
+				line[1], line[2] = line[2], line[1] 			
+		elif line[5] == '-':
+			line[1], line[2] = line[2], line[1]  # reverse coordinates for junctions on - strand
+		elif line[5] not in ['+', '-']:
+			continue
+		chrom, fiveprime, threeprime, name, count, strand = line
+		chrom = strand + chrom
+		if chrom not in junctiondict:
+			junctiondict[chrom] = {}
+		if fiveprime not in junctiondict[chrom]:
+			junctiondict[chrom][fiveprime] = {}  # 5' end anchor
+		if threeprime not in junctiondict[chrom][fiveprime]:
+			junctiondict[chrom][fiveprime][threeprime] = [0,0, name]
+		junctiondict[chrom][fiveprime][threeprime][0] = int(count)
+	return junctiondict
 
 alljuncs = {}
-
-for line in bed1:
-	line = line.rstrip().split('\t')
-	if fiveprimeon:
-		if line[5] == '+':
-			line[1], line[2] = line[2], line[1] 			
-	elif line[5] == '-':
-		line[1], line[2] = line[2], line[1]  # reverse coordinates for junctions on - strand
-	elif line[5] not in ['+', '-']:
-		continue
-	chrom, fiveprime, threeprime, name, count, strand = line
-	chrom = strand+chrom
-	if chrom not in alljuncs:  # chrom
-		alljuncs[chrom] = {}
-	if fiveprime not in alljuncs[chrom]:
-		alljuncs[chrom][fiveprime] = {}  # 5' end anchor
-	if threeprime not in alljuncs[chrom][fiveprime]:
-		alljuncs[chrom][fiveprime][threeprime] = [0,0, name]
-	alljuncs[chrom][fiveprime][threeprime][0] = int(count)
-
-
-for line in bed2:
-	line = line.rstrip().split('\t')
-	if fiveprimeon:
-		if line[5] == '+':
-			line[1], line[2] = line[2], line[1] 			
-	elif line[5] == '-':
-		line[1], line[2] = line[2], line[1]  # reverse coordinates for junctions on - strand
-	elif line[5] not in ['+', '-']:
-		continue
-	chrom, fiveprime, threeprime, name, count, strand = line
-	chrom = strand+chrom
-	if chrom not in alljuncs:  # chrom
-		alljuncs[chrom] = {}
-	if fiveprime not in alljuncs[chrom]:
-		alljuncs[chrom][fiveprime] = {}  # 5' end anchor
-	if threeprime not in alljuncs[chrom][fiveprime]:
-		alljuncs[chrom][fiveprime][threeprime] = [0,0, name]
-	alljuncs[chrom][fiveprime][threeprime][1] = int(count)
-
-
+alljuncs = bedreader(bed1, alljuncs)
+alljuncs = bedreader(bed2, alljuncs)
 
 with open(outfilename, 'wt') as outfile:
 	writer = csv.writer(outfile, delimiter='\t')
 	for chrom in alljuncs:
 		for fiveprime in alljuncs[chrom]:
-			if len(alljuncs[chrom][fiveprime]) == 1:
+			if len(alljuncs[chrom][fiveprime]) == 1:  # if there is only one 3' end
 				continue
 			for threeprime1 in alljuncs[chrom][fiveprime]:
 				if sum(alljuncs[chrom][fiveprime][threeprime1][:2]) == 1:
 					continue
 				allothercounts = [0,0]
 				for threeprime2 in alljuncs[chrom][fiveprime]:
-					if threeprime1 == threeprime2: #or sum(alljuncs[chrom][fiveprime][threeprime2]) == 0:
+					if threeprime1 == threeprime2: # or sum(alljuncs[chrom][fiveprime][threeprime2]) == 0:
 						continue
 					allothercounts[0] += alljuncs[chrom][fiveprime][threeprime2][0]
 					allothercounts[1] += alljuncs[chrom][fiveprime][threeprime2][1]
-					# ctable = [alljuncs[chrom][fiveprime][threeprime1], alljuncs[chrom][fiveprime][threeprime2]]
-				if sum(allothercounts) == 1:
+				if sum(allothercounts) <= 1:
 					continue
 				ctable = [alljuncs[chrom][fiveprime][threeprime1][:2], allothercounts]
 				name = alljuncs[chrom][fiveprime][threeprime1][2]
 				writer.writerow([chrom[1:], fiveprime, threeprime1, sps.fisher_exact(ctable)[1], 
-					chrom[0]] + ctable[0] + ctable[1]+ [name])
+					chrom[0]] + ctable[0] + ctable[1] + [name])
